@@ -1,0 +1,86 @@
+{
+  "package": "ccpfm_script_recovery_2026-07-25",
+  "recovered_script_count": 6,
+  "scripts": [
+    {
+      "filename": "ccpfm_poisson_validation_prior_preserving_core_reg.py",
+      "bytes": 92912,
+      "lines": 2076,
+      "sha256": "6063bc9d92e87dd6690e496aa0ad04972582824193b5a4889b36722da86eeccd",
+      "syntax_check": "passed"
+    },
+    {
+      "filename": "ccpfm_poisson_validation_prior_preserving_core_reg_complete.py",
+      "bytes": 99395,
+      "lines": 2174,
+      "sha256": "4a918968d62230e3e04fb1925c9c89b5788efd216e23e8c734281fded1754fec",
+      "syntax_check": "passed"
+    },
+    {
+      "filename": "ccpfm_poisson_validation_prior_preserving_core_reg_live_boundary.py",
+      "bytes": 107928,
+      "lines": 2329,
+      "sha256": "12af420a02109c3a9e90db2b5c6543955cd702550c17ace7f27068aa87a64540",
+      "syntax_check": "passed"
+    },
+    {
+      "filename": "ccpfm_poisson_validation_prior_preserving_core_reg_live_boundary_gate2.py",
+      "bytes": 108902,
+      "lines": 2347,
+      "sha256": "69ebcc2ace7e7e57043b47b1c632b9f477f2a4b90f45928f22c93c99962716f9",
+      "syntax_check": "passed"
+    },
+    {
+      "filename": "ccpfm_poisson_validation_selective_enrichment.py",
+      "bytes": 75155,
+      "lines": 1809,
+      "sha256": "4afc15c961fa891f216166929d2c9dfe3c2cb8d10de3dce021b205a9f4da5c2f",
+      "syntax_check": "passed"
+    },
+    {
+      "filename": "ccpfm_poisson_validation_selective_enrichment_forced.py",
+      "bytes": 84984,
+      "lines": 1954,
+      "sha256": "d7e071d0af99dc87c1c5002b8e06815828db4987458e6d177e7e58b8bdbbc659",
+      "syntax_check": "passed"
+    }
+  ],
+  "referenced_but_not_byte_recoverable": [
+    {
+      "filename": "ccpfm_poisson_validation_prior_preserving_core_reg_fixed.py",
+      "status": "Indexed prior upload (93,298 bytes), but its old attachment backing is unavailable. The later prior_preserving_core_reg variants are included."
+    },
+    {
+      "filename": "studyccpfm_poisson_validation_prior_preserving_core_reg_live_boundary_gate2.py",
+      "status": "No exact artifact or exact filename match found; may have been a local alias or a filename remembered with an added study prefix."
+    },
+    {
+      "filename": "ccpfm_poisson_validation_prior_preserving_core_reg_live_boundary_gate2_with_namls.py",
+      "status": "Referenced in prior workflow context; no separate downloadable backing file found."
+    },
+    {
+      "filename": "ccpfm_poisson_validation_prior_preserving_core_reg_live_boundary_gate2_with_namls_frozenlivegate_winners_softrobust.py",
+      "status": "Referenced as the full later NAMLS version; no separate downloadable backing file found."
+    },
+    {
+      "filename": "ccpfm_poisson_validation_prior_preserving_core_reg_live_boundary_gate2_with_namls_frozenlivegate_winners_softrobust_gainmerged_conservative_review.py",
+      "status": "Referenced as a later review-oriented version; no separate downloadable backing file found."
+    },
+    {
+      "filename": "ccpfm_poisson_validation_refined.py",
+      "status": "Referenced in prior workflow context; no separate downloadable backing file found."
+    },
+    {
+      "filename": "ccpfm_poisson_validation_v0.py",
+      "status": "Referenced in prior workflow context; no separate downloadable backing file found."
+    },
+    {
+      "filename": "ccpfm_poisson_validation.py",
+      "status": "Referenced as the original standalone harness; no separate downloadable backing file found."
+    },
+    {
+      "filename": "ccpfm_poisson_validation_complete_livegate_decisive.py",
+      "status": "Referenced by a prior local path; no copy was found in the active workspace."
+    }
+  ]
+}

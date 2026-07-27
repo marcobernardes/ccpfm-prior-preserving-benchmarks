@@ -1,0 +1,21 @@
+\begin{table*}[t]
+\centering
+\caption{Conditioning and cost for the extended diffusion benchmarks at the finest tested spacing.}
+\label{tab:extended_cost}
+\begin{tabular}{lllrrrr}
+\toprule
+Problem & Domain & Method & $N$ & $\widehat\kappa(A)$ & Assembly (s) & Solve (s) \\
+\midrule
+circular\_interface & circle & ccpfm\_flux & 301 & 2.254e+03 & 0.186 & 0.002 \\
+circular\_interface & circle & wls\_strong & 301 & 3.866e+02 & 0.123 & 0.002 \\
+smooth\_variable & annulus & ccpfm\_flux & 301 & 1.624e+02 & 0.169 & 0.002 \\
+smooth\_variable & annulus & wls\_strong & 301 & 4.723e+01 & 0.107 & 0.001 \\
+smooth\_variable & circle & ccpfm\_flux & 301 & 4.782e+02 & 0.209 & 0.002 \\
+smooth\_variable & circle & wls\_strong & 301 & 7.919e+01 & 0.111 & 0.001 \\
+smooth\_variable & ellipse & ccpfm\_flux & 266 & 3.539e+02 & 0.150 & 0.002 \\
+smooth\_variable & ellipse & wls\_strong & 266 & 6.267e+01 & 0.087 & 0.001 \\
+smooth\_variable & star & ccpfm\_flux & 240 & 1.276e+02 & 0.106 & 0.001 \\
+smooth\_variable & star & wls\_strong & 240 & 1.904e+02 & 0.078 & 0.001 \\
+\bottomrule
+\end{tabular}
+\end{table*}

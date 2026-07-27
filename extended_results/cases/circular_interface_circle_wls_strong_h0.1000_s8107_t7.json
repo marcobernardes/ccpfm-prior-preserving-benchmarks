@@ -1,0 +1,19 @@
+{
+  "problem": "circular_interface",
+  "domain": "circle",
+  "method": "wls_strong",
+  "h": 0.1,
+  "seed": 8107,
+  "trial": 7,
+  "n_points": 306,
+  "l2": 2.5606699461900613,
+  "linf": 5.726276168373514,
+  "condition_estimate": 473.0936649297297,
+  "cloud_seconds": 0.22311037901090458,
+  "assembly_seconds": 0.14273836500069592,
+  "solve_seconds": 0.0019956099858973175,
+  "total_seconds": 0.3678443539974978,
+  "unstable": false,
+  "median_local_cond": 9.243657842892215,
+  "max_local_cond": 20.500992357720598
+}

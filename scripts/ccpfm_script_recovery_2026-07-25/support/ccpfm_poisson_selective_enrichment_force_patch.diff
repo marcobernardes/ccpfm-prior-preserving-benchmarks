@@ -1,0 +1,370 @@
+--- /mnt/data/ccpfm_poisson_validation_selective_enrichment.py	2026-03-16 01:04:17.954398746 +0000
++++ /mnt/data/ccpfm_poisson_validation_selective_enrichment_forced.py	2026-03-16 01:08:19.766929720 +0000
+@@ -624,12 +624,21 @@
+     selective_cond_trigger: float = 2.5e4,
+     selective_sigma_trigger: float = 2.5e-4,
+     selective_distance_factor: float = 3.0,
+-) -> Tuple[List[Tuple[int, int]], Dict[Tuple[int, int], int], List[List[int]], Array, Array, Array, Array]:
++    force_min_flagged_core_nodes: int = 2,
++    force_relaxed_distance_factor: float = 5.0,
++) -> Tuple[List[Tuple[int, int]], Dict[Tuple[int, int], int], List[List[int]], Array, Array, Array, Array, Array, Array]:
+     """Build a CCPFm graph starting from the boundary-split version, then add
+     *very sparse* rescue edges only for flagged interior-core nodes.
+ 
+-    Returns edge_is_added and node_is_flagged arrays so diagnostics can separate
+-    original edges from added rescue edges.
++    This branch now has a deterministic fallback so the enrichment path is
++    actually exercised: if the absolute triggers produce too few flagged core
++    nodes, the worst-scoring core nodes are force-flagged. It also progressively
++    relaxes the rescue-edge distance cap when a flagged node cannot find an
++    admissible partner under the strict cap.
++
++    Returns edge_is_added, node_is_flagged, node_is_force_flagged, and
++    node_added_count arrays so diagnostics can separate original vs added rescue
++    edges and show whether flagged nodes actually received rescue edges.
+     """
+     tree = cKDTree(points)
+     dist_to_boundary = compute_boundary_distances(points, is_boundary)
+@@ -688,6 +697,8 @@
+ 
+     base_edges_set = set(edges_set)
+     node_is_flagged = np.zeros(len(points), dtype=bool)
++    node_is_force_flagged = np.zeros(len(points), dtype=bool)
++    node_added_count = np.zeros(len(points), dtype=int)
+ 
+     # Sparse, flagged-node-only enrichment: only deep-interior nodes with weak
+     # local clouds get 1-2 rescue edges, and only to nearby interior-core nodes.
+@@ -696,18 +707,47 @@
+         if interior_idx.size:
+             tree_int = cKDTree(points[interior_idx])
+             core_thresh_global = selective_core_factor * median_r
++
++            core_nodes: List[int] = []
++            core_scores = np.full(len(points), -np.inf, dtype=float)
++            threshold_flagged: List[int] = []
++
+             for i in interior_idx:
+                 i = int(i)
+                 if dist_to_boundary[i] <= max(core_thresh_global, selective_core_factor * radii[i]):
+                     continue
++                core_nodes.append(i)
+                 cond_i = local_conds[i]
+                 sig_i = local_sigmins[i]
++                score_i = (cond_i / max(sig_i, 1.0e-16)) if (np.isfinite(cond_i) and np.isfinite(sig_i)) else -np.inf
++                core_scores[i] = score_i
+                 flagged = (np.isfinite(cond_i) and cond_i > selective_cond_trigger) or (
+                     np.isfinite(sig_i) and sig_i < selective_sigma_trigger
+                 )
+-                if not flagged:
++                if flagged:
++                    threshold_flagged.append(i)
++                    node_is_flagged[i] = True
++
++            # Deterministic fallback: if the absolute thresholds are too strict for
++            # the current cloud family, force-flag the worst-scoring core nodes so
++            # the rescue-edge path is actually exercised.
++            need_force = max(0, min(int(force_min_flagged_core_nodes), len(core_nodes)) - len(threshold_flagged))
++            if need_force > 0:
++                ranked_core = sorted(
++                    [i for i in core_nodes if not node_is_flagged[i]],
++                    key=lambda ii: core_scores[ii],
++                    reverse=True,
++                )
++                for i in ranked_core[:need_force]:
++                    node_is_flagged[i] = True
++                    node_is_force_flagged[i] = True
++
++            for i in core_nodes:
++                i = int(i)
++                if not node_is_flagged[i]:
+                     continue
+-                node_is_flagged[i] = True
++                cond_i = local_conds[i]
++                sig_i = local_sigmins[i]
+                 extra_target = max(1, int(selective_enrichment_neighbors))
+                 # allow one extra edge only if both triggers are bad
+                 if (np.isfinite(cond_i) and cond_i > 1.8 * selective_cond_trigger) and (
+@@ -715,33 +755,74 @@
+                 ):
+                     extra_target += 1
+ 
+-                kq = min(len(interior_idx), len(adjacency_nodes[i]) + 20)
++                # Ask for more candidates than before so the admissible core-core
++                # search is less likely to fail spuriously.
++                kq = min(len(interior_idx), max(len(adjacency_nodes[i]) + 20, 40))
+                 d, q = tree_int.query(points[i], k=kq)
+                 q = np.atleast_1d(q)
+                 d = np.atleast_1d(d)
+                 added = 0
+-                dist_cap = selective_distance_factor * max(radii[i], median_r)
+-                for dj, qq in zip(d, q):
+-                    j = int(interior_idx[int(qq)])
+-                    if j == i or j in adjacency_nodes[i]:
+-                        continue
+-                    if dj > dist_cap:
+-                        continue
+-                    if dist_to_boundary[j] <= max(core_thresh_global, selective_core_factor * radii[j]):
+-                        continue
+-                    e = (i, j) if i < j else (j, i)
+-                    edges_set.add(e)
+-                    adjacency_nodes[i].add(j)
+-                    adjacency_nodes[j].add(i)
+-                    added += 1
++
++                strict_cap = selective_distance_factor * max(radii[i], median_r)
++                relaxed_cap = max(strict_cap, force_relaxed_distance_factor * max(radii[i], median_r))
++                cap_schedule = [strict_cap]
++                if relaxed_cap > strict_cap * 1.0001:
++                    cap_schedule.append(relaxed_cap)
++
++                for dist_cap in cap_schedule:
++                    for dj, qq in zip(d, q):
++                        j = int(interior_idx[int(qq)])
++                        if j == i or j in adjacency_nodes[i]:
++                            continue
++                        if dj > dist_cap:
++                            continue
++                        if dist_to_boundary[j] <= max(core_thresh_global, selective_core_factor * radii[j]):
++                            continue
++                        e = (i, j) if i < j else (j, i)
++                        if e in edges_set:
++                            continue
++                        edges_set.add(e)
++                        adjacency_nodes[i].add(j)
++                        adjacency_nodes[j].add(i)
++                        added += 1
++                        node_added_count[i] += 1
++                        node_added_count[j] += 1
++                        if added >= extra_target:
++                            break
+                     if added >= extra_target:
+                         break
+ 
++                # Final fallback for force-flagged or still-unserved flagged nodes:
++                # if strict core-core search fails, connect to the nearest available
++                # interior node away from the immediate boundary layer so the
++                # enrichment path is actually exercised.
++                if added < extra_target:
++                    d_all, q_all = tree.query(points[i], k=min(len(points), max(len(adjacency_nodes[i]) + 40, 64)))
++                    d_all = np.atleast_1d(d_all)
++                    q_all = np.atleast_1d(q_all)
++                    for dj, qq in zip(d_all, q_all):
++                        j = int(qq)
++                        if j == i or is_boundary[j] or j in adjacency_nodes[i]:
++                            continue
++                        if dist_to_boundary[j] <= 0.75 * max(core_thresh_global, selective_core_factor * radii[j]):
++                            continue
++                        e = (i, j) if i < j else (j, i)
++                        if e in edges_set:
++                            continue
++                        edges_set.add(e)
++                        adjacency_nodes[i].add(j)
++                        adjacency_nodes[j].add(i)
++                        added += 1
++                        node_added_count[i] += 1
++                        node_added_count[j] += 1
++                        if added >= extra_target:
++                            break
++
+     edges = sorted(edges_set)
+     edge_index = {e: k for k, e in enumerate(edges)}
+     edge_is_added = np.array([e not in base_edges_set for e in edges], dtype=bool)
+     adjacency = [sorted(list(s)) for s in adjacency_nodes]
+-    return edges, edge_index, adjacency, local_conds, local_sigmins, edge_is_added, node_is_flagged
++    return edges, edge_index, adjacency, local_conds, local_sigmins, edge_is_added, node_is_flagged, node_is_force_flagged, node_added_count
+ 
+ 
+ def compute_node_volumes(radii: Array) -> Array:
+@@ -1106,6 +1187,8 @@
+     selective_sigma_trigger: float,
+     selective_distance_factor: float,
+     added_edge_penalty: float,
++    force_min_flagged_core_nodes: int,
++    force_relaxed_distance_factor: float,
+ ) -> Tuple[csr_matrix, Array, Dict[str, float], Dict[str, Array | float]]:
+     n = len(points)
+     x, y = points[:, 0], points[:, 1]
+@@ -1156,6 +1239,12 @@
+         edge_index = {}
+         edge_is_added = np.array([], dtype=bool)
+         node_is_flagged = np.zeros(n, dtype=bool)
++        node_is_force_flagged = np.zeros(n, dtype=bool)
++        node_added_count = np.zeros(n, dtype=int)
++        selected_attempt_idx = -1
++        selected_attempt_alpha = float("nan")
++        selected_attempt_min_neighbors = -1
++        selected_attempt_max_neighbors = -1
+     elif operator == "ccpfm":
+         best = None
+         best_score = float('inf')
+@@ -1166,8 +1255,8 @@
+             (max(alpha, 2.75), max(min_neighbors + 14, 32), max(max_neighbors + 28, 96)),
+         ]
+         h_ref = float(np.median(radii[~is_boundary])) if np.any(~is_boundary) else float(np.median(radii))
+-        for alpha_cc, min_cc, max_cc in attempt_configs:
+-            edges, edge_index, adjacency, local_conds, local_sigmins, edge_is_added, node_is_flagged = build_edge_list(
++        for attempt_idx, (alpha_cc, min_cc, max_cc) in enumerate(attempt_configs):
++            edges, edge_index, adjacency, local_conds, local_sigmins, edge_is_added, node_is_flagged, node_is_force_flagged, node_added_count = build_edge_list(
+                 points=points, is_boundary=is_boundary, radii=radii, alpha=alpha_cc,
+                 min_neighbors=min_cc, max_neighbors=max_cc,
+                 boundary_neighbor_boost=boundary_neighbor_boost + 4,
+@@ -1177,6 +1266,8 @@
+                 selective_cond_trigger=selective_cond_trigger,
+                 selective_sigma_trigger=selective_sigma_trigger,
+                 selective_distance_factor=selective_distance_factor,
++                force_min_flagged_core_nodes=force_min_flagged_core_nodes,
++                force_relaxed_distance_factor=force_relaxed_distance_factor,
+             )
+             lambda0, weights, distances = compute_ccpfm_prior(
+                 points, radii, edges, edge_index, adjacency, is_boundary, volumes,
+@@ -1193,10 +1284,10 @@
+             score = max(patches_tmp["patch_x_max"], patches_tmp["patch_y_max"], patches_tmp["patch_quad_max"]) + 1.0e-2 * corr_stats["correction_rel_p90"]
+             if score < best_score:
+                 best_score = score
+-                best = (A, adjacency, edges, edge_index, local_conds, local_sigmins, lambda0, lambdas, distances, corr_stats, patches_tmp, meta, edge_is_added, node_is_flagged)
++                best = (A, adjacency, edges, edge_index, local_conds, local_sigmins, lambda0, lambdas, distances, corr_stats, patches_tmp, meta, edge_is_added, node_is_flagged, node_is_force_flagged, node_added_count, attempt_idx, alpha_cc, min_cc, max_cc)
+             if score <= 5.0e-7:
+                 break
+-        A, adjacency, edges, edge_index, local_conds, local_sigmins, lambda0, lambdas, distances, corr_stats, patches, meta, edge_is_added, node_is_flagged = best
++        A, adjacency, edges, edge_index, local_conds, local_sigmins, lambda0, lambdas, distances, corr_stats, patches, meta, edge_is_added, node_is_flagged, node_is_force_flagged, node_added_count, selected_attempt_idx, selected_attempt_alpha, selected_attempt_min_neighbors, selected_attempt_max_neighbors = best
+         b = np.where(is_boundary, u_bdry, f_rhs)
+         diagnostics_extra = {
+             "constraint_row_node": meta["row_node"],
+@@ -1207,6 +1298,12 @@
+             "edge_distances": distances,
+             "edge_is_added": edge_is_added,
+             "node_is_flagged": node_is_flagged,
++            "node_is_force_flagged": node_is_force_flagged,
++            "node_added_count": node_added_count,
++            "selected_attempt_idx": np.array([selected_attempt_idx], dtype=int),
++            "selected_attempt_alpha": np.array([selected_attempt_alpha], dtype=float),
++            "selected_attempt_min_neighbors": np.array([selected_attempt_min_neighbors], dtype=int),
++            "selected_attempt_max_neighbors": np.array([selected_attempt_max_neighbors], dtype=int),
+         }
+         local_sizes = np.array([len(a) + 1 for a in adjacency], dtype=float)
+     else:
+@@ -1231,11 +1328,21 @@
+         **patches,
+     }
+     if operator == "ccpfm":
++        flagged_with_added = int(np.sum(node_is_flagged & (node_added_count > 0)))
+         stats.update({
+             "n_added_edges": int(np.sum(edge_is_added)),
+             "n_original_edges": int(len(edge_is_added) - np.sum(edge_is_added)),
+             "added_edge_fraction": float(np.mean(edge_is_added)) if len(edge_is_added) else 0.0,
+             "n_flagged_enrichment_nodes": int(np.sum(node_is_flagged)),
++            "n_force_flagged_enrichment_nodes": int(np.sum(node_is_force_flagged)),
++            "n_flagged_nodes_with_added_edges": flagged_with_added,
++            "n_flagged_nodes_without_added_edges": int(np.sum(node_is_flagged) - flagged_with_added),
++            "mean_added_edges_per_flagged_node": float(np.mean(node_added_count[node_is_flagged])) if np.any(node_is_flagged) else 0.0,
++            "max_added_edges_on_flagged_node": int(np.max(node_added_count[node_is_flagged])) if np.any(node_is_flagged) else 0,
++            "selected_attempt_idx": int(selected_attempt_idx),
++            "selected_attempt_alpha": float(selected_attempt_alpha),
++            "selected_attempt_min_neighbors": int(selected_attempt_min_neighbors),
++            "selected_attempt_max_neighbors": int(selected_attempt_max_neighbors),
+         })
+     diagnostics = {
+         "radii": radii,
+@@ -1309,6 +1416,8 @@
+     selective_sigma_trigger: float,
+     selective_distance_factor: float,
+     added_edge_penalty: float,
++    force_min_flagged_core_nodes: int,
++    force_relaxed_distance_factor: float,
+     save_points: bool,
+     plot_diagnostics: bool,
+ ) -> Dict[str, float]:
+@@ -1334,6 +1443,8 @@
+         selective_sigma_trigger=selective_sigma_trigger,
+         selective_distance_factor=selective_distance_factor,
+         added_edge_penalty=added_edge_penalty,
++        force_min_flagged_core_nodes=force_min_flagged_core_nodes,
++        force_relaxed_distance_factor=force_relaxed_distance_factor,
+     )
+     t_asm = time.perf_counter()
+     u_num = spsolve(A, b)
+@@ -1396,6 +1507,10 @@
+             near_bdry_interior=near_bdry_interior,
+             core_interior=core_interior,
+             lambdas=diagnostics.get("lambdas", np.array([], dtype=float)),
++            edge_is_added=diagnostics.get("edge_is_added", np.array([], dtype=bool)),
++            node_is_flagged=diagnostics.get("node_is_flagged", np.array([], dtype=bool)),
++            node_is_force_flagged=diagnostics.get("node_is_force_flagged", np.array([], dtype=bool)),
++            node_added_count=diagnostics.get("node_added_count", np.array([], dtype=int)),
+         )
+     if plot_diagnostics and (domain_name == "star" or linf > 2.5):
+         maybe_plot_case_diagnostics(
+@@ -1581,6 +1696,9 @@
+             "constraint_resid_inf", "constraint_resid_l2", "correction_rel_l2", "correction_abs_median", "correction_abs_max",
+             "correction_rel_median", "correction_rel_p90", "correction_rel_max", "negative_lambda_fraction", "lambda_ratio_median",
+             "original_edge_fraction", "added_edge_fraction", "n_added_edges", "n_original_edges", "n_flagged_enrichment_nodes",
++            "n_force_flagged_enrichment_nodes", "n_flagged_nodes_with_added_edges", "n_flagged_nodes_without_added_edges",
++            "mean_added_edges_per_flagged_node", "max_added_edges_on_flagged_node",
++            "selected_attempt_idx", "selected_attempt_alpha", "selected_attempt_min_neighbors", "selected_attempt_max_neighbors",
+             "original_edge_correction_rel_median", "original_edge_correction_rel_p90", "original_edge_correction_rel_max", "original_edge_negative_lambda_fraction",
+             "added_edge_correction_rel_median", "added_edge_correction_rel_p90", "added_edge_correction_rel_max", "added_edge_negative_lambda_fraction",
+             "core_edge_correction_rel_median", "core_edge_correction_rel_p90", "core_edge_correction_rel_max", "core_edge_negative_lambda_fraction",
+@@ -1677,6 +1795,8 @@
+     p.add_argument("--selective-sigma-trigger", type=float, default=2.5e-4, help="Flag CCPFm nodes for rescue-edge enrichment when local sigma_min falls below this value.")
+     p.add_argument("--selective-distance-factor", type=float, default=3.0, help="Maximum rescue-edge length as a multiple of local reference spacing.")
+     p.add_argument("--added-edge-penalty", type=float, default=12.0, help="Quadratic correction penalty multiplier applied to added rescue edges.")
++    p.add_argument("--force-min-flagged-core-nodes", type=int, default=2, help="If the absolute enrichment triggers flag too few deep-core nodes, force-flag at least this many worst-scoring core nodes so rescue-edge enrichment is exercised.")
++    p.add_argument("--force-relaxed-distance-factor", type=float, default=5.0, help="Relaxed rescue-edge distance cap used only after the strict selective-distance-factor search fails for a flagged node.")
+     p.add_argument("--family-seed-base", type=int, default=1000)
+     p.add_argument("--save-points", action="store_true")
+     p.add_argument("--plot-diagnostics", action="store_true")
+@@ -1726,6 +1846,8 @@
+                             selective_sigma_trigger=float(args.selective_sigma_trigger),
+                             selective_distance_factor=float(args.selective_distance_factor),
+                             added_edge_penalty=float(args.added_edge_penalty),
++                            force_min_flagged_core_nodes=int(args.force_min_flagged_core_nodes),
++                            force_relaxed_distance_factor=float(args.force_relaxed_distance_factor),
+                             save_points=bool(args.save_points),
+                             plot_diagnostics=bool(args.plot_diagnostics),
+                         )
+@@ -1740,9 +1862,18 @@
+             try:
+                 row = fut.result()
+                 rows.append(row)
++                extra_msg = ""
++                if row["operator"] == "ccpfm":
++                    extra_msg = (
++                        f" flags={int(row.get('n_flagged_enrichment_nodes', 0))}"
++                        f" forced={int(row.get('n_force_flagged_enrichment_nodes', 0))}"
++                        f" hit={int(row.get('n_flagged_nodes_with_added_edges', 0))}"
++                        f" added={int(row.get('n_added_edges', 0))}"
++                        f" att={int(row.get('selected_attempt_idx', -1))}"
++                    )
+                 print(
+                     f"[done] {row['domain']:>8s} {row['operator']:>24s} h={row['h_target']:.4f} "
+-                    f"N={row['n_points']:4d} L2={row['l2']:.3e} Linf={row['linf']:.3e}"
++                    f"N={row['n_points']:4d} L2={row['l2']:.3e} Linf={row['linf']:.3e}{extra_msg}"
+                 )
+             except Exception as exc:  # pragma: no cover
+                 print(f"[fail] {task['domain_name']} {task['operator']} h={task['h']}: {exc}")
+@@ -1783,10 +1914,24 @@
+                 f"{r['domain']:>10s}: h={r['h_target']:.4f}, median L2={r['median_l2']:.3e}, "
+                 f"median Linf={r['median_linf']:.3e}, global order(L2, median)={r['global_order_l2_median']:.3f}, "
+                 f"mean patch quad={r['mean_patch_quad_max']:.2e}, mean neg(lambda)={r['mean_negative_lambda_fraction']:.3f}, "
++                f"flagged={r.get('mean_n_flagged_enrichment_nodes', float('nan')):.2f}, force-flagged={r.get('mean_n_force_flagged_enrichment_nodes', float('nan')):.2f}, "
++                f"flagged->added={r.get('mean_n_flagged_nodes_with_added_edges', float('nan')):.2f}, added edges={r.get('mean_n_added_edges', float('nan')):.2f}, "
+                 f"added frac={r.get('mean_added_edge_fraction', float('nan')):.3f}, orig corr p90={r.get('mean_original_edge_correction_rel_p90', float('nan')):.2f}, "
+-                f"added corr p90={r.get('mean_added_edge_correction_rel_p90', float('nan')):.2f}"
++                f"added corr p90={r.get('mean_added_edge_correction_rel_p90', float('nan')):.2f}, attempt={r.get('mean_selected_attempt_idx', float('nan')):.2f}"
+             )
+ 
++    print("\nSelective-enrichment activation summary (mean counts at finest h):")
++    for r in sorted([a for a in agg_rows if a['operator'] == 'ccpfm' and float(a['h_target']) == min(args.hs)], key=lambda z: z['domain']):
++        print(
++            f"  {r['domain']:>8s}: flagged={r.get('mean_n_flagged_enrichment_nodes', float('nan')):.2f}, "
++            f"force-flagged={r.get('mean_n_force_flagged_enrichment_nodes', float('nan')):.2f}, "
++            f"flagged->added={r.get('mean_n_flagged_nodes_with_added_edges', float('nan')):.2f}, "
++            f"flagged no-add={r.get('mean_n_flagged_nodes_without_added_edges', float('nan')):.2f}, "
++            f"added edges={r.get('mean_n_added_edges', float('nan')):.2f}, "
++            f"added/flagged={r.get('mean_mean_added_edges_per_flagged_node', float('nan')):.2f}, "
++            f"attempt={r.get('mean_selected_attempt_idx', float('nan')):.2f}"
++        )
++
+     print("\nBoundary/interior split summary (median L2 at finest h):")
+     finest_h = min(args.hs)
+     for op in ["wls", "ccpfm"]:

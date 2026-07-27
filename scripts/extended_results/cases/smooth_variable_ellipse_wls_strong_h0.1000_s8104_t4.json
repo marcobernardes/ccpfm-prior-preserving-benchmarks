@@ -1,0 +1,19 @@
+{
+  "problem": "smooth_variable",
+  "domain": "ellipse",
+  "method": "wls_strong",
+  "h": 0.1,
+  "seed": 8104,
+  "trial": 4,
+  "n_points": 265,
+  "l2": 0.12096190251291408,
+  "linf": 0.6301019142074963,
+  "condition_estimate": 64.61527613818346,
+  "cloud_seconds": 0.24221570500230882,
+  "assembly_seconds": 0.09466995899856556,
+  "solve_seconds": 0.0011952030035899952,
+  "total_seconds": 0.3380808670044644,
+  "unstable": false,
+  "median_local_cond": 9.217089375909927,
+  "max_local_cond": 21.46768939523612
+}

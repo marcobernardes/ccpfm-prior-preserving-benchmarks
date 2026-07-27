@@ -1,0 +1,19 @@
+{
+  "problem": "smooth_variable",
+  "domain": "annulus",
+  "method": "wls_strong",
+  "h": 0.2,
+  "seed": 8102,
+  "trial": 2,
+  "n_points": 101,
+  "l2": 0.7454991376502378,
+  "linf": 2.741440243306376,
+  "condition_estimate": 18.613893980594753,
+  "cloud_seconds": 0.05717450400697999,
+  "assembly_seconds": 0.027017268002964556,
+  "solve_seconds": 0.000445411991677247,
+  "total_seconds": 0.08463718400162179,
+  "unstable": false,
+  "median_local_cond": 11.26994614502212,
+  "max_local_cond": 18.192097589176033
+}

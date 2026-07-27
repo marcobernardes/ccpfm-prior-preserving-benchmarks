@@ -1,0 +1,19 @@
+{
+  "problem": "smooth_variable",
+  "domain": "circle",
+  "method": "wls_strong",
+  "h": 0.2,
+  "seed": 8101,
+  "trial": 1,
+  "n_points": 94,
+  "l2": 1.0530362087553204,
+  "linf": 2.8509902855163674,
+  "condition_estimate": 42.01830382513883,
+  "cloud_seconds": 0.05574871299904771,
+  "assembly_seconds": 0.0275343969988171,
+  "solve_seconds": 0.000486759003251791,
+  "total_seconds": 0.0837698690011166,
+  "unstable": false,
+  "median_local_cond": 9.351748413557956,
+  "max_local_cond": 21.447262877619043
+}

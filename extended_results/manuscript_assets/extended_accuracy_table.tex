@@ -1,0 +1,21 @@
+\begin{table*}[t]
+\centering
+\caption{Extended diffusion benchmarks at the finest tested spacing. All entries are generated from the accompanying scripts.}
+\label{tab:extended_diffusion}
+\begin{tabular}{lllrrrrrr}
+\toprule
+Problem & Domain & Method & $h$ & Median $L_2$ & Median $L_\infty$ & Order & Unstable \\
+\midrule
+circular\_interface & circle & ccpfm\_flux & 0.100 & 5.788e+00 & 2.212e+01 & -1.29 & 1 \\
+circular\_interface & circle & wls\_strong & 0.100 & 2.426e+00 & 5.658e+00 & 0.39 & 0 \\
+smooth\_variable & annulus & ccpfm\_flux & 0.100 & 1.210e-01 & 2.701e-01 & 1.50 & 0 \\
+smooth\_variable & annulus & wls\_strong & 0.100 & 1.016e-01 & 5.489e-01 & 2.73 & 0 \\
+smooth\_variable & circle & ccpfm\_flux & 0.100 & 1.353e-01 & 3.331e-01 & 1.39 & 0 \\
+smooth\_variable & circle & wls\_strong & 0.100 & 1.162e-01 & 6.080e-01 & 3.91 & 0 \\
+smooth\_variable & ellipse & ccpfm\_flux & 0.100 & 1.466e-01 & 3.364e-01 & 1.21 & 0 \\
+smooth\_variable & ellipse & wls\_strong & 0.100 & 1.209e-01 & 6.040e-01 & 3.18 & 0 \\
+smooth\_variable & star & ccpfm\_flux & 0.100 & 5.488e-02 & 1.505e-01 & 2.13 & 0 \\
+smooth\_variable & star & wls\_strong & 0.100 & 1.562e-01 & 1.639e+00 & 1.68 & 0 \\
+\bottomrule
+\end{tabular}
+\end{table*}
